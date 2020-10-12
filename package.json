@@ -1,0 +1,27 @@
+{
+  "name": "fallescript",
+  "version": "0.1.0",
+  "description": "A language layer on top of JUCE created specifically to improve platform abstraction and code brevity.",
+  "main": "src/index.ts",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "dev": "ts-node-dev ./src/index.ts"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/iwoplaza/fallescript.git"
+  },
+  "author": "Iwo Plaza",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/iwoplaza/fallescript/issues"
+  },
+  "homepage": "https://github.com/iwoplaza/fallescript#readme",
+  "devDependencies": {
+    "ora": "^5.1.0",
+    "ts-node-dev": "^1.0.0-pre.63"
+  },
+  "dependencies": {
+    "chalk": "^4.1.0"
+  }
+}
