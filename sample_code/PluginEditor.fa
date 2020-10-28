@@ -1,0 +1,41 @@
+import
+    TestProcessor from './PluginProgessor'
+    Editor, EditorParams from 'falle-ui'
+    Log from 'falle'
+    sqrt from 'math'
+
+let a: int32    = 5
+let aSquared   <= a ^ 2
+
+Log.debug('Hello World!')
+
+export class Vector2d
+    public readonly x: int32 = 0
+    public readonly y: int32 = 0
+    public lengthSq <= this.x + this.y
+    public length <= sqrt(lengthSq)
+
+    constructor(x: int32, y: int32)
+        this.x = x
+        this.y = y
+
+    operator+(other: Vector2d)
+        return new Vector2d(this.x + other.x, this.y + other.y)
+
+export function calculateCube(a: int32)
+    return a ^ 3
+
+export component PluginEditor(EditorParams params)
+    behaviour
+        const amountOfKeys: int32 = 25
+        let keyboardShown = false;
+
+        @mount: Log.debug('UPDATE')
+        @[keyboardShown]: Log.debug('Keyboard has been toggled.')
+
+    view
+        Editor(...params)
+            Header
+                Box
+            MidiKeyboard(amountOfKeys = amountOfKeys)
+            Button(@click => keyboardShown = !keyboardShown)

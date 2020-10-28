@@ -1,0 +1,172 @@
+import Coffi;
+
+namespace Coffi
+{
+	public class PluginProcessor extends AudioProcessor
+	{
+		public const unique_ref<SynthSettings> synthSettings;
+		public const unique_ref<PresetLoader> presetLoader;
+
+		PluginProcessor()
+		{
+			Resources.Instance.Init();
+
+			synthSettings = new SynthSettings(this, productInfo);
+
+			synth = new Synthesiser();
+			for (int i = 0; i < maxNumVoices; ++i)
+				synth.AddVoice(new GrainVoice(synthSettings));
+
+			presetLoader = new PresetLoader(synthSettings, productInfo);
+
+			synthSettings.SampleProvider.AddChangeListener(this);
+		}
+
+		~PluginProcessor()
+		{
+			Resources.Destroy();
+		}
+
+		override void PrepareToPlay(sampleRate: double, samplesPerBlock: int)
+		{
+			base.PrepareToPlay(sampleRate, samplesPerBlock);
+
+			synth->SetCurrentPlaybackSampleRate(sampleRate);
+			keyboardState.Reset();
+		}
+
+		override bool IsBusesLayoutSupported(const BusesLayout& layouts)
+		{
+			if (layouts.getMainOutputChannelSet() != AudioChannelSet::mono() &&
+				layouts.getMainOutputChannelSet() != AudioChannelSet::stereo())
+				return false;
+			return true;
+		}
+
+		/**
+		* Called after playback has stopped, to let the object free up any resources it
+		* no longer needs.
+		*/
+		override void ReleaseResources()
+		{
+			keyboardState.Reset();
+		}
+
+		override void PluginProcessor::processBlock(AudioBuffer<float>& buffer, MidiBuffer& midiMessages)
+		{
+			const int numSamples = buffer.getNumSamples();
+			keyboardState.processNextMidiBuffer(midiMessages, 0, numSamples, true);
+
+			{
+				const ScopedLock lock(sampleLock);
+				synth->renderNextBlock(buffer, midiMessages, 0, numSamples);
+			}
+
+			unique_ref<GrainVoice> latestVoice = GrainVoice.GetLatestVoice();
+			if (latestVoice != null)
+			{
+				buffer.ApplyGain(synthSettings.Gain.GetEvaluatedValue(latestVoice->getControllerState()));
+			}
+			else
+			{
+				buffer.ApplyGain(synthSettings.Gain.Value);
+			}
+		}
+
+		override void ResetSample()
+		{
+			const ScopedLock lock(sampleLock);
+
+			for (uint32 i = 0; i < synth.NumVoices; ++i)
+			{
+				ref<GrainVoice> voice = synth.GetVoice(i) as ref<GrainVoice>;
+				if (voice instanceof GrainVoice) {
+					voice.Reset();
+				}
+			}
+
+			synth.AllNotesOff(0, false);
+			synth.ClearSounds();
+		}
+
+		void SampleChanged()
+		{
+			resetSample();
+
+			SampleProvider& sampleProvider = synthSettings->getSampleProvider();
+			if (sampleProvider.isSampleLoaded())
+			{
+				synth->addSound(new GrainSound(this, sampleProvider.getAudioSampleBuffer(), *synthSettings));
+			}
+		}
+
+		void GetStateInformation(MemoryBlock& destData)
+		{
+			auto xml = std::make_unique<XmlElement>("Coffi");
+			xml->setAttribute("pluginVersion", String(JucePlugin_VersionString));
+
+			XmlElement* presetLoaderElement = xml->createNewChildElement("presetLoader");
+			presetLoader->populate(*presetLoaderElement);
+
+			XmlElement* stateElement = xml->createNewChildElement("state");
+			synthSettings->populate(*stateElement);
+
+			copyXmlToBinary(*xml, destData);
+		}
+
+		override void ParseState(const void* data, int sizeInBytes)
+		{
+			unique_ref<XmlElement> xmlState(getXmlFromBinary(data, sizeInBytes));
+
+			try
+			{
+				if (xmlState != nullptr)
+				{
+					if (xmlState.HasTagName("Coffi"))
+					{
+						ref<XmlElement> presetLoaderElement = xmlState.GetChildByName("presetLoader");
+						if (presetLoaderElement != null)
+							presetLoader.Parse(presetLoaderElement);
+
+						ref<XmlElement> stateElement = xmlState.GetChildByName("state");
+						if (stateElement != null)
+							synthSettings.Parse(stateElement);
+					}
+				}
+			}
+			catch (const InvalidFormatException& e)
+			{
+				// Some part of the state is corrupt.
+				AlertWindow.ShowMessageBox(AlertIconType.WARNING_ICON, "Corrupt state", e.what());
+			}
+			catch (const FileNotFoundException& e)
+			{
+				// The stored sample wasn't found.
+				AlertWindow.ShowMessageBox(AlertIconType.WARNING_ICON, "File not found", e.what());
+			}
+		}
+	}
+
+	MidiKeyboardState& PluginProcessor::getMIDIKeyboardState() { return keyboardState; }
+	Synthesiser* PluginProcessor::getSynthesiser() const { return synth.get(); }
+	AudioPlayHead::CurrentPositionInfo* PluginProcessor::getLatestPlayHeadInfo() const { return lastestPlayHeadInfo.get(); };
+	SynthSettings& PluginProcessor::getSynthSettings() { return *synthSettings; }
+	const String PluginProcessor::getName() const { return JucePlugin_Name; }
+	bool PluginProcessor::acceptsMidi() const { return true; }
+	bool PluginProcessor::producesMidi() const { return false; }
+	bool PluginProcessor::isMidiEffect() const { return false; }
+	double PluginProcessor::getTailLengthSeconds() const { return 0.0; }
+	int PluginProcessor::getNumPrograms() { return 1; }
+	int PluginProcessor::getCurrentProgram() { return 0; }
+	void PluginProcessor::setCurrentProgram(int index) { }
+	const String PluginProcessor::getProgramName(int index) { return{}; }
+	void PluginProcessor::changeProgramName(int index, const String& newName) { }
+	bool PluginProcessor::hasEditor() const { return true; }
+
+	bool HasEditor => true;
+
+	ref<AudioProcessorEditor> createEditor()
+	{
+		return new PluginEditor(this, synthSettings.GetParameters(), presetLoader);
+	}
+}

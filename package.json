@@ -22,6 +22,7 @@
     "ts-node-dev": "^1.0.0-pre.63"
   },
   "dependencies": {
-    "chalk": "^4.1.0"
+    "chalk": "^4.1.0",
+    "meow": "^7.1.1"
   }
 }
